@@ -1,0 +1,5 @@
+{
+  "name": "MindGenius AI",
+  "description": "An intelligent, interactive mind mapping tool powered by Gemini. Generate visual structures from text instantly or create them manually.",
+  "requestFramePermissions": []
+}
