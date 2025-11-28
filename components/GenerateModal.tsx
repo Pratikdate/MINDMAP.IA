@@ -1,5 +1,6 @@
+
 import React, { useState } from 'react';
-import { X, Sparkles, Loader2, FileText } from 'lucide-react';
+import { X, Sparkles, Loader2, FileText, Link as LinkIcon } from 'lucide-react';
 
 interface GenerateModalProps {
   isOpen: boolean;
@@ -35,13 +36,13 @@ const GenerateModal: React.FC<GenerateModalProps> = ({ isOpen, onClose, onGenera
         <div className="p-6 flex-1 overflow-y-auto">
             <div className="mb-4">
                 <label className="block text-sm font-medium text-slate-300 mb-2">
-                    Paste your article, notes, or document text here
+                    Paste content to analyze
                 </label>
                 <div className="relative">
                     <textarea 
                         value={text}
                         onChange={(e) => setText(e.target.value)}
-                        placeholder="e.g. A summary of Photosynthesis, Project meeting notes, or a brainstorm list..."
+                        placeholder="Paste a website URL (e.g., https://example.com/article) OR paste raw text here..."
                         className="w-full h-64 bg-slate-950 border border-slate-800 rounded-xl p-4 text-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500/50 resize-none font-mono text-sm leading-relaxed"
                     />
                     <div className="absolute bottom-4 right-4 text-xs text-slate-500">
@@ -50,15 +51,29 @@ const GenerateModal: React.FC<GenerateModalProps> = ({ isOpen, onClose, onGenera
                 </div>
             </div>
             
-            <div className="bg-blue-900/20 border border-blue-900/50 rounded-lg p-4 flex gap-3">
-                <div className="mt-0.5 text-blue-400">
-                    <FileText size={16} />
+            <div className="bg-blue-900/20 border border-blue-900/50 rounded-lg p-4 flex flex-col gap-2">
+                <div className="flex items-start gap-3">
+                     <div className="mt-0.5 text-blue-400">
+                        <FileText size={16} />
+                    </div>
+                    <div>
+                        <h4 className="text-sm font-semibold text-blue-200">Text Mode</h4>
+                        <p className="text-xs text-blue-300/80">
+                            Paste articles, notes, or outlines. The AI will structure them into a hierarchy.
+                        </p>
+                    </div>
                 </div>
-                <div>
-                    <h4 className="text-sm font-semibold text-blue-200">Pro Tip</h4>
-                    <p className="text-xs text-blue-300/80 mt-1">
-                        The AI works best with structured text like outlines, summaries, or articles with clear headings. It will automatically categorize key concepts.
-                    </p>
+                <div className="w-full h-px bg-blue-900/30 my-1"></div>
+                <div className="flex items-start gap-3">
+                     <div className="mt-0.5 text-blue-400">
+                        <LinkIcon size={16} />
+                    </div>
+                    <div>
+                        <h4 className="text-sm font-semibold text-blue-200">Web Mode</h4>
+                        <p className="text-xs text-blue-300/80">
+                            Paste a URL (http/https). The AI will research the page and create a map from its content.
+                        </p>
+                    </div>
                 </div>
             </div>
         </div>

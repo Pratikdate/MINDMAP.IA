@@ -2,7 +2,7 @@
 import React, { useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { MindMapNode, Viewport, NodeStyle, SecondaryLink } from '../types';
-import { Plus, Trash2, Edit2, Maximize, ZoomIn, ZoomOut, GripHorizontal } from 'lucide-react';
+import { Plus, Trash2, Edit2, Maximize, ZoomIn, ZoomOut, GripHorizontal, Target } from 'lucide-react';
 
 interface MindMapCanvasProps {
   nodes: MindMapNode[];
@@ -150,17 +150,74 @@ const MindMapCanvas: React.FC<MindMapCanvasProps> = ({
   };
 
   const handleWheel = (e: React.WheelEvent) => {
-    const zoomSensitivity = 0.001;
-    const newScale = Math.min(Math.max(0.1, viewport.scale - e.deltaY * zoomSensitivity), 3);
-    setViewport(prev => ({ ...prev, scale: newScale }));
+    // 1. Zoom Logic (Ctrl + Wheel or Pinch-Zoom)
+    if (e.ctrlKey || e.metaKey) {
+        const zoomIntensity = 0.002;
+        const zoomFactor = 1 - e.deltaY * zoomIntensity;
+        const newScale = Math.min(Math.max(0.1, viewport.scale * zoomFactor), 5);
+
+        const screenCenterX = window.innerWidth / 2;
+        const screenCenterY = window.innerHeight / 2;
+
+        // Mouse position relative to center of screen
+        const mouseX = e.clientX - screenCenterX; 
+        const mouseY = e.clientY - screenCenterY;
+
+        // Calculate world point under mouse before zoom
+        const worldX = (mouseX - viewport.x) / viewport.scale;
+        const worldY = (mouseY - viewport.y) / viewport.scale;
+
+        // Calculate new viewport offset to keep world point under mouse
+        const newViewportX = mouseX - worldX * newScale;
+        const newViewportY = mouseY - worldY * newScale;
+
+        setViewport({
+            x: newViewportX,
+            y: newViewportY,
+            scale: newScale
+        });
+    } else {
+        // 2. Pan Logic (Standard Wheel Scroll)
+        // Standard scrolling convention: Wheel Down (positive delta) -> View moves Down (Content moves Up)
+        setViewport(prev => ({
+            ...prev,
+            x: prev.x - e.deltaX,
+            y: prev.y - e.deltaY
+        }));
+    }
   };
 
-  const updateZoom = (delta: number) => {
-    setViewport(prev => ({ ...prev, scale: Math.min(Math.max(0.1, prev.scale + delta), 3) }));
+  const updateZoom = (factor: number) => {
+    // Zoom into center of screen (0,0 relative to center)
+    setViewport(prev => {
+        const newScale = Math.min(Math.max(0.1, prev.scale * factor), 5);
+        const ratio = newScale / prev.scale;
+        // Adjust pan to keep center stable: NewPan = OldPan * (NewScale / OldScale)
+        return {
+            x: prev.x * ratio,
+            y: prev.y * ratio,
+            scale: newScale
+        };
+    });
   };
 
-  const resetZoom = () => {
-      setViewport({ x: 0, y: 0, scale: 1 });
+  const handleFocus = () => {
+      if (selectedNodeId) {
+          const node = nodes.find(n => n.id === selectedNodeId);
+          if (node) {
+              // Center view on this node
+              // We want: 0 = node.x * scale + viewport.x
+              // viewport.x = -node.x * scale
+              setViewport(prev => ({
+                  ...prev,
+                  x: -node.x * prev.scale,
+                  y: -node.y * prev.scale
+              }));
+          }
+      } else {
+          // Reset to origin if nothing selected
+          setViewport({ x: 0, y: 0, scale: 1 });
+      }
   };
 
   // Node Interactions
@@ -224,7 +281,8 @@ const MindMapCanvas: React.FC<MindMapCanvasProps> = ({
   // Generate links purely from node positions
   const renderLinks = () => {
       const links: React.ReactNode[] = [];
-      const nodeMap = new Map(nodes.map(n => [n.id, n]));
+      const nodeMap = new Map<string, MindMapNode>();
+      nodes.forEach(n => nodeMap.set(n.id, n));
 
       // 1. Primary Hierarchy Links
       nodes.forEach(node => {
@@ -296,14 +354,14 @@ const MindMapCanvas: React.FC<MindMapCanvasProps> = ({
         )}
 
         <div className="absolute bottom-6 left-6 flex flex-col gap-2 z-40">
-            <button onClick={() => updateZoom(0.1)} className="p-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg shadow-lg border border-slate-700 transition-colors">
+            <button onClick={() => updateZoom(1.1)} className="p-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg shadow-lg border border-slate-700 transition-colors" title="Zoom In (Ctrl+Wheel)">
                 <ZoomIn size={20} />
             </button>
-            <button onClick={() => updateZoom(-0.1)} className="p-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg shadow-lg border border-slate-700 transition-colors">
+            <button onClick={() => updateZoom(0.9)} className="p-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg shadow-lg border border-slate-700 transition-colors" title="Zoom Out (Ctrl+Wheel)">
                 <ZoomOut size={20} />
             </button>
-            <button onClick={resetZoom} className="p-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg shadow-lg border border-slate-700 transition-colors">
-                <Maximize size={20} />
+            <button onClick={handleFocus} className="p-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg shadow-lg border border-slate-700 transition-colors" title="Center View / Focus Selected">
+                {selectedNodeId ? <Target size={20} className="text-blue-400" /> : <Maximize size={20} />}
             </button>
         </div>
 
@@ -425,6 +483,13 @@ const MindMapCanvas: React.FC<MindMapCanvasProps> = ({
             })}
             </AnimatePresence>
         </div>
+
+         <div className="absolute bottom-4 right-4 z-30 flex flex-col items-end gap-1 pointer-events-none select-none">
+             <div className="text-xs text-slate-500 font-mono bg-slate-900/50 p-1 rounded border border-slate-800 text-right">
+                Scroll to Pan • Ctrl+Scroll to Zoom<br/>
+                Drag on Node: Connect • Alt+Drag: Link
+             </div>
+          </div>
     </div>
   );
 };
