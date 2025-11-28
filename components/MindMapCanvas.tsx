@@ -1,5 +1,5 @@
 
-import React, { useRef, useState } from 'react';
+import React, { useRef, useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { MindMapNode, Viewport, NodeStyle, SecondaryLink } from '../types';
 import { Plus, Trash2, Edit2, Maximize, ZoomIn, ZoomOut, GripHorizontal, Target } from 'lucide-react';
@@ -149,43 +149,67 @@ const MindMapCanvas: React.FC<MindMapCanvasProps> = ({
     setDropTargetId(null);
   };
 
-  const handleWheel = (e: React.WheelEvent) => {
-    // 1. Zoom Logic (Ctrl + Wheel or Pinch-Zoom)
-    if (e.ctrlKey || e.metaKey) {
-        const zoomIntensity = 0.002;
-        const zoomFactor = 1 - e.deltaY * zoomIntensity;
-        const newScale = Math.min(Math.max(0.1, viewport.scale * zoomFactor), 5);
+  // Native Wheel Event Listener to prevent default browser zoom
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
 
-        const screenCenterX = window.innerWidth / 2;
-        const screenCenterY = window.innerHeight / 2;
+    const onWheel = (e: WheelEvent) => {
+        // Always prevent default to stop browser native zoom/scroll behavior
+        e.preventDefault();
 
-        // Mouse position relative to center of screen
-        const mouseX = e.clientX - screenCenterX; 
-        const mouseY = e.clientY - screenCenterY;
+        // 1. Zoom Logic (Ctrl + Wheel or Pinch-Zoom on trackpads)
+        if (e.ctrlKey || e.metaKey) {
+            const clientX = e.clientX;
+            const clientY = e.clientY;
+            const deltaY = e.deltaY;
 
-        // Calculate world point under mouse before zoom
-        const worldX = (mouseX - viewport.x) / viewport.scale;
-        const worldY = (mouseY - viewport.y) / viewport.scale;
+            setViewport(prev => {
+                const zoomIntensity = 0.002;
+                const zoomFactor = 1 - deltaY * zoomIntensity;
+                const newScale = Math.min(Math.max(0.1, prev.scale * zoomFactor), 5);
 
-        // Calculate new viewport offset to keep world point under mouse
-        const newViewportX = mouseX - worldX * newScale;
-        const newViewportY = mouseY - worldY * newScale;
+                const screenCenterX = window.innerWidth / 2;
+                const screenCenterY = window.innerHeight / 2;
 
-        setViewport({
-            x: newViewportX,
-            y: newViewportY,
-            scale: newScale
-        });
-    } else {
-        // 2. Pan Logic (Standard Wheel Scroll)
-        // Standard scrolling convention: Wheel Down (positive delta) -> View moves Down (Content moves Up)
-        setViewport(prev => ({
-            ...prev,
-            x: prev.x - e.deltaX,
-            y: prev.y - e.deltaY
-        }));
-    }
-  };
+                // Mouse position relative to center of screen
+                const mouseX = clientX - screenCenterX; 
+                const mouseY = clientY - screenCenterY;
+
+                // Calculate world point under mouse before zoom
+                const worldX = (mouseX - prev.x) / prev.scale;
+                const worldY = (mouseY - prev.y) / prev.scale;
+
+                // Calculate new viewport offset to keep world point under mouse
+                const newViewportX = mouseX - worldX * newScale;
+                const newViewportY = mouseY - worldY * newScale;
+
+                return {
+                    x: newViewportX,
+                    y: newViewportY,
+                    scale: newScale
+                };
+            });
+        } else {
+            // 2. Pan Logic (Standard Wheel Scroll)
+            // Note: Shift+Wheel is automatically mapped to deltaX by browsers
+            const deltaX = e.deltaX;
+            const deltaY = e.deltaY;
+            
+            setViewport(prev => ({
+                ...prev,
+                x: prev.x - deltaX,
+                y: prev.y - deltaY
+            }));
+        }
+    };
+
+    container.addEventListener('wheel', onWheel, { passive: false });
+
+    return () => {
+        container.removeEventListener('wheel', onWheel);
+    };
+  }, []);
 
   const updateZoom = (factor: number) => {
     // Zoom into center of screen (0,0 relative to center)
@@ -340,12 +364,12 @@ const MindMapCanvas: React.FC<MindMapCanvasProps> = ({
   return (
     <div 
       ref={containerRef}
+      id="mindmap-canvas-container"
       className="w-full h-full bg-slate-950 overflow-hidden cursor-grab active:cursor-grabbing relative"
       onMouseDown={handleMouseDown}
       onMouseMove={handleMouseMove}
       onMouseUp={handleMouseUp}
       onMouseLeave={handleMouseUp}
-      onWheel={handleWheel}
     >
         {nodes.length === 0 && (
             <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
@@ -353,7 +377,7 @@ const MindMapCanvas: React.FC<MindMapCanvasProps> = ({
             </div>
         )}
 
-        <div className="absolute bottom-6 left-6 flex flex-col gap-2 z-40">
+        <div className="absolute bottom-6 left-6 flex flex-col gap-2 z-40 no-export">
             <button onClick={() => updateZoom(1.1)} className="p-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg shadow-lg border border-slate-700 transition-colors" title="Zoom In (Ctrl+Wheel)">
                 <ZoomIn size={20} />
             </button>
@@ -413,7 +437,7 @@ const MindMapCanvas: React.FC<MindMapCanvasProps> = ({
                 >
                     {/* Floating Action Menu */}
                     {isSelected && !isEditing && !isDraggingNode && (
-                        <div className="absolute -top-11 left-1/2 -translate-x-1/2 flex gap-1 bg-slate-800 p-1.5 rounded-lg border border-slate-700 shadow-xl z-50">
+                        <div className="absolute -top-11 left-1/2 -translate-x-1/2 flex gap-1 bg-slate-800 p-1.5 rounded-lg border border-slate-700 shadow-xl z-50 no-export">
                             <button onMouseDown={(e) => { e.stopPropagation(); onNodeAdd(node.id); }} className="p-1 hover:bg-blue-600 rounded text-slate-300 hover:text-white transition-colors" title="Add Child (Tab)">
                                 <Plus size={14} />
                             </button>
@@ -445,7 +469,7 @@ const MindMapCanvas: React.FC<MindMapCanvasProps> = ({
                                 animate={{ opacity: 1, y: 0, scale: 1 }}
                                 exit={{ opacity: 0, y: 5, scale: 0.95 }}
                                 transition={{ duration: 0.2 }}
-                                className="absolute bottom-full left-1/2 -translate-x-1/2 mb-3 w-64 p-3 bg-slate-900/95 backdrop-blur-md border border-slate-600/80 rounded-xl shadow-2xl z-[60] pointer-events-none origin-bottom"
+                                className="absolute bottom-full left-1/2 -translate-x-1/2 mb-3 w-64 p-3 bg-slate-900/95 backdrop-blur-md border border-slate-600/80 rounded-xl shadow-2xl z-[60] pointer-events-none origin-bottom no-export"
                             >
                                 <div className="flex items-center gap-2 mb-1.5 border-b border-slate-700/50 pb-1.5">
                                     <span className="text-[10px] font-bold uppercase tracking-wider text-blue-400">Description</span>
@@ -484,7 +508,7 @@ const MindMapCanvas: React.FC<MindMapCanvasProps> = ({
             </AnimatePresence>
         </div>
 
-         <div className="absolute bottom-4 right-4 z-30 flex flex-col items-end gap-1 pointer-events-none select-none">
+         <div className="absolute bottom-4 right-4 z-30 flex flex-col items-end gap-1 pointer-events-none select-none no-export">
              <div className="text-xs text-slate-500 font-mono bg-slate-900/50 p-1 rounded border border-slate-800 text-right">
                 Scroll to Pan • Ctrl+Scroll to Zoom<br/>
                 Drag on Node: Connect • Alt+Drag: Link
